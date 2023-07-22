@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 
 	"github.com/dapr/cli/pkg/standalone"
 )
@@ -37,6 +38,37 @@ type RunExec struct {
 	DaprMetricPort int
 }
 
+type RunnableCmd interface {
+	Start() error
+	Wait() error
+	StderrPipe() (io.ReadCloser, error)
+	StdoutPipe() (io.ReadCloser, error)
+	Pid() int
+	HasProcess() bool
+	Running() bool
+	Kill() error
+}
+
+type RunnableExecCmd struct {
+	*exec.Cmd
+}
+
+func (r *RunnableExecCmd) Pid() int {
+	return r.Process.Pid
+}
+
+func (r *RunnableExecCmd) HasProcess() bool {
+	return r.Process != nil
+}
+
+func (r *RunnableExecCmd) Running() bool {
+	return r.ProcessState == nil || !r.ProcessState.Exited()
+}
+
+func (r *RunnableExecCmd) Kill() error {
+	return r.Process.Kill()
+}
+
 // RunOutput represents the run execution.
 type RunOutput struct {
 	DaprCMD      *exec.Cmd
@@ -44,7 +76,7 @@ type RunOutput struct {
 	DaprHTTPPort int
 	DaprGRPCPort int
 	AppID        string
-	AppCMD       *exec.Cmd
+	AppCMD       RunnableCmd
 	AppErr       error
 }
 
@@ -119,10 +151,19 @@ func NewOutput(config *standalone.RunConfig) (*RunOutput, error) {
 
 	//nolint
 	var appCMD *exec.Cmd = standalone.GetAppCommand(config)
+	var execCmd RunnableCmd
+	if appCMD != nil && strings.HasSuffix(appCMD.Path, ".wasm") {
+		execCmd, err = NewWasmCmd(appCMD.Path, appCMD.Args, appCMD.Env)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		execCmd = &RunnableExecCmd{appCMD}
+	}
 	return &RunOutput{
 		DaprCMD:      daprCMD,
 		DaprErr:      nil,
-		AppCMD:       appCMD,
+		AppCMD:       execCmd,
 		AppErr:       nil,
 		AppID:        config.AppID,
 		DaprHTTPPort: config.HTTPPort,

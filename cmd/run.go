@@ -366,9 +366,9 @@ dapr run --run-file /path/to/directory
 		}
 
 		if output.AppCMD != nil {
-			if output.AppCMD.Process != nil {
-				print.InfoStatusEvent(os.Stdout, fmt.Sprintf("Updating metadata for appPID: %d", output.AppCMD.Process.Pid))
-				err = metadata.Put(output.DaprHTTPPort, "appPID", strconv.Itoa(output.AppCMD.Process.Pid), output.AppID, unixDomainSocket)
+			if output.AppCMD.HasProcess() {
+				print.InfoStatusEvent(os.Stdout, fmt.Sprintf("Updating metadata for appPID: %d", output.AppCMD.Pid()))
+				err = metadata.Put(output.DaprHTTPPort, "appPID", strconv.Itoa(output.AppCMD.Pid()), output.AppID, unixDomainSocket)
 				if err != nil {
 					print.WarningStatusEvent(os.Stdout, "Could not update sidecar metadata for appPID: %s", err.Error())
 				}
@@ -407,8 +407,8 @@ dapr run --run-file /path/to/directory
 		if output.AppErr != nil {
 			exitWithError = true
 			print.FailureStatusEvent(os.Stderr, fmt.Sprintf("Error exiting App: %s", output.AppErr))
-		} else if output.AppCMD != nil && (output.AppCMD.ProcessState == nil || !output.AppCMD.ProcessState.Exited()) {
-			err = output.AppCMD.Process.Kill()
+		} else if output.AppCMD != nil && output.AppCMD.Running() {
+			err = output.AppCMD.Kill()
 			if err != nil {
 				exitWithError = true
 				print.FailureStatusEvent(os.Stderr, fmt.Sprintf("Error exiting App: %s", err))
